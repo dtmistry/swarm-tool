@@ -16,10 +16,9 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 
-	"github.com/carsdotcom/swarm-tool/action"
-	"github.com/carsdotcom/swarm-tool/types"
+	"github.com/dtmistry/swarm-tool/action"
+	"github.com/dtmistry/swarm-tool/types"
 	"github.com/spf13/cobra"
 )
 
@@ -27,11 +26,11 @@ var (
 	src, srcCertPath, dest, destCertPath string
 )
 
-// secretsMigrateCmd represents the secretsMigrate command
-var secretsMigrateCmd = &cobra.Command{
-	Use:   "secrets-migrate",
-	Short: "Migrate secrets from one Swarm cluster to other",
-	Long: `Migrate secrets from one Swarm cluster to other. 
+// copySecretsCmd represents the secretsMigrate command
+var copySecretsCmd = &cobra.Command{
+	Use:   "copy-secrets",
+	Short: "Copy secrets from one Swarm cluster to other",
+	Long: `Copy secrets from one Swarm cluster to other. 
 	For security reasons, this command will only work with a TLS enabled daemon`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(src) == 0 {
@@ -47,8 +46,7 @@ var secretsMigrateCmd = &cobra.Command{
 		//TODO add file check for cert dirs
 		return nil
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("secrets-migrate called")
+	RunE: func(cmd *cobra.Command, args []string) error {
 		source := &types.SwarmConnection{
 			Host:     src,
 			CertPath: srcCertPath,
@@ -57,19 +55,25 @@ var secretsMigrateCmd = &cobra.Command{
 			Host:     dest,
 			CertPath: destCertPath,
 		}
-		action.MigrateSecrets(source, dest)
+		err := action.CopySecrets(source, dest)
+		if err != nil {
+			return err
+		}
+		return nil
 	},
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 func init() {
-	RootCmd.AddCommand(secretsMigrateCmd)
+	RootCmd.AddCommand(copySecretsCmd)
 
-	secretsMigrateCmd.Flags().StringVarP(&src, "source", "s", "", "Source Docker host")
-	secretsMigrateCmd.Flags().StringVarP(&dest, "destination", "d", "", "Destination Docker host")
-	secretsMigrateCmd.Flags().StringVarP(&srcCertPath, "source-cert-path", "", "", "Source Docker TLS cert path")
-	secretsMigrateCmd.Flags().StringVarP(&destCertPath, "destination-cert-path", "", "", "Destination Docker TLS cert path")
-	secretsMigrateCmd.MarkFlagRequired("source")
-	secretsMigrateCmd.MarkFlagRequired("destination")
-	secretsMigrateCmd.MarkFlagRequired("source-cert-path")
-	secretsMigrateCmd.MarkFlagRequired("destination-cert-path")
+	copySecretsCmd.Flags().StringVarP(&src, "source", "s", "", "Source Docker host")
+	copySecretsCmd.Flags().StringVarP(&dest, "destination", "d", "", "Destination Docker host")
+	copySecretsCmd.Flags().StringVarP(&srcCertPath, "source-cert-path", "", "", "Source Docker TLS cert path")
+	copySecretsCmd.Flags().StringVarP(&destCertPath, "destination-cert-path", "", "", "Destination Docker TLS cert path")
+	copySecretsCmd.MarkFlagRequired("source")
+	copySecretsCmd.MarkFlagRequired("destination")
+	copySecretsCmd.MarkFlagRequired("source-cert-path")
+	copySecretsCmd.MarkFlagRequired("destination-cert-path")
 }
