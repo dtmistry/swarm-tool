@@ -2,15 +2,50 @@ package action
 
 import (
 	"context"
+	"strings"
 
 	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
 	swarm "github.com/docker/docker/api/types/swarm"
 	"github.com/dtmistry/swarm-tool/types"
 	"github.com/dtmistry/swarm-tool/util"
 	"github.com/pkg/errors"
 )
 
-func CopySecrets(source, target *types.SwarmConnection) error {
+func GetMap(flags []string) (map[string]string, error) {
+	args := make(map[string]string)
+	if len(flags) == 0 {
+		return args, nil
+	}
+	for i := range flags {
+		if !strings.Contains(flags[i], "=") {
+			return args, errors.New("bad format of labels (expected name=value)")
+		} else {
+			parts := strings.SplitN(flags[i], "=", 2)
+			name := strings.ToLower(strings.TrimSpace(parts[0]))
+			value := strings.TrimSpace(parts[1])
+			args[name] = value
+		}
+	}
+	return args, nil
+}
+
+func GetArgs(flags []string) (filters.Args, error) {
+	var (
+		args = filters.NewArgs()
+		err  error
+	)
+	for i := range flags {
+		args, err = filters.ParseFlag(flags[i], args)
+		if err != nil {
+			return args, err
+		}
+	}
+	return args, nil
+}
+
+//TODO break the huge method
+func CopySecrets(source, target *types.SwarmConnection, filters, labels []string, prefix string) error {
 	util.Info("\nCopying secrets from [%s] to [%s]\n\n", source.Host, target.Host)
 
 	//Create and check source docker client
@@ -33,8 +68,23 @@ func CopySecrets(source, target *types.SwarmConnection) error {
 		return errors.Wrap(err, "Unable to connect to target docker host")
 	}
 
+	filterArgs, err := GetArgs(filters)
+	if err != nil {
+		return errors.Wrap(err, "Unable to parse filter labels")
+	}
+
+	createArgs, err := GetMap(labels)
+	if err != nil {
+		return errors.Wrap(err, "Unable to parse labels")
+	}
+
+	//Add copied-from label. copied-from=host
+	createArgs["copied-from"] = source.Host
+
 	//Get a list of all secrets from the source cluster
-	secrets, err := srcClient.SecretList(context.Background(), dockertypes.SecretListOptions{})
+	secrets, err := srcClient.SecretList(context.Background(), dockertypes.SecretListOptions{
+		Filters: filterArgs,
+	})
 	if err != nil {
 		return errors.Wrap(err, "Unable to read secrets from source cluster")
 	}
@@ -57,7 +107,12 @@ func CopySecrets(source, target *types.SwarmConnection) error {
 			Data:        data,
 			Annotations: secret.Spec.Annotations,
 		}
-		newSecret.Name = secret.Spec.Name + "_copy"
+		if len(prefix) == 0 {
+			newSecret.Name = secret.Spec.Name
+		} else {
+			newSecret.Name = prefix + "_" + secret.Spec.Name
+		}
+		newSecret.Labels = createArgs
 		secretsToCopy = append(secretsToCopy, newSecret)
 	}
 

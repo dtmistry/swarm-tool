@@ -24,6 +24,7 @@ import (
 
 var (
 	src, srcCertPath, dest, destCertPath string
+	filters, labels                      = []string{}, []string{}
 )
 
 // copySecretsCmd represents the secretsMigrate command
@@ -44,6 +45,7 @@ var copySecretsCmd = &cobra.Command{
 		}
 		//TODO add regex check for host
 		//TODO add file check for cert dirs
+		//TODO provide secret list filter options
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -55,7 +57,7 @@ var copySecretsCmd = &cobra.Command{
 			Host:     dest,
 			CertPath: destCertPath,
 		}
-		err := action.CopySecrets(source, dest)
+		err := action.CopySecrets(source, dest, filters, labels, "copy")
 		if err != nil {
 			return err
 		}
@@ -72,6 +74,8 @@ func init() {
 	copySecretsCmd.Flags().StringVarP(&dest, "destination", "d", "", "Destination Docker host")
 	copySecretsCmd.Flags().StringVarP(&srcCertPath, "source-cert-path", "", "", "Source Docker TLS cert path")
 	copySecretsCmd.Flags().StringVarP(&destCertPath, "destination-cert-path", "", "", "Destination Docker TLS cert path")
+	copySecretsCmd.Flags().StringArrayVarP(&filters, "filter", "", nil, "Filters used to copy secrets from source cluster")
+	copySecretsCmd.Flags().StringArrayVarP(&labels, "label", "", nil, "Labels added to secret in the target cluster ")
 	copySecretsCmd.MarkFlagRequired("source")
 	copySecretsCmd.MarkFlagRequired("destination")
 	copySecretsCmd.MarkFlagRequired("source-cert-path")
