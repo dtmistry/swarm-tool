@@ -7,6 +7,7 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	swarm "github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/client"
 	"github.com/dtmistry/swarm-tool/types"
 	"github.com/dtmistry/swarm-tool/util"
 	"github.com/pkg/errors"
@@ -42,6 +43,50 @@ func GetArgs(flags []string) (filters.Args, error) {
 		}
 	}
 	return args, nil
+}
+
+func readSecrets(client *client.Client, secrets []swarm.Secret, prefix string, createArgs map[string]string) ([]swarm.SecretSpec, map[string]error) {
+	var secretsToCopy []swarm.SecretSpec
+	failedToRead := make(map[string]error)
+
+	//For all secrets in the list, read the raw data and create a new list with
+	// `_copy` as a suffix for the new name
+	for _, secret := range secrets {
+		util.Info("Reading secret [%s] from source cluster\n", secret.Spec.Name)
+		//Get raw secret data for a given secret
+		_, data, err := client.SecretInspectWithRaw(context.Background(), secret.ID)
+		if err != nil {
+			failedToRead[secret.Spec.Name] = err
+			continue
+		}
+		newSecret := swarm.SecretSpec{
+			Data:        data,
+			Annotations: secret.Spec.Annotations,
+		}
+		if len(prefix) == 0 {
+			newSecret.Name = secret.Spec.Name
+		} else {
+			newSecret.Name = prefix + "_" + secret.Spec.Name
+		}
+		newSecret.Labels = createArgs
+		secretsToCopy = append(secretsToCopy, newSecret)
+	}
+	return secretsToCopy, failedToRead
+}
+
+func createSecrets(client *client.Client, secretsToCopy []swarm.SecretSpec) map[string]error {
+	util.Info("\nCreating secrets in target cluster\n\n")
+	failedToCreate := make(map[string]error)
+	for _, secret := range secretsToCopy {
+		//Create the secret in the target cluster
+		res, err := client.SecretCreate(context.Background(), secret)
+		if err != nil {
+			failedToCreate[secret.Name] = err
+			continue
+		}
+		util.Info("Created secret [%s] with ID [%s]\n", secret.Name, res.ID)
+	}
+	return failedToCreate
 }
 
 //TODO break the huge method
@@ -89,33 +134,7 @@ func CopySecrets(source, target *types.SwarmConnection, filters, labels []string
 		return errors.Wrap(err, "Unable to read secrets from source cluster")
 	}
 
-	var secretsToCopy []swarm.SecretSpec
-
-	failedToRead := make(map[string]error)
-
-	//For all secrets in the list, read the raw data and create a new list with
-	// `_copy` as a suffix for the new name
-	for _, secret := range secrets {
-		util.Info("Reading secret [%s] from source cluster\n", secret.Spec.Name)
-		//Get raw secret data for a given secret
-		_, data, err := srcClient.SecretInspectWithRaw(context.Background(), secret.ID)
-		if err != nil {
-			failedToRead[secret.Spec.Name] = err
-			continue
-		}
-		newSecret := swarm.SecretSpec{
-			Data:        data,
-			Annotations: secret.Spec.Annotations,
-		}
-		if len(prefix) == 0 {
-			newSecret.Name = secret.Spec.Name
-		} else {
-			newSecret.Name = prefix + "_" + secret.Spec.Name
-		}
-		newSecret.Labels = createArgs
-		secretsToCopy = append(secretsToCopy, newSecret)
-	}
-
+	secretsToCopy, failedToRead := readSecrets(srcClient, secrets, prefix, createArgs)
 	//Check if there were errors while reading the secrets
 	if len(failedToRead) != 0 {
 		util.Warn("Unable to inspect the following secrets from the source cluster")
@@ -129,17 +148,7 @@ func CopySecrets(source, target *types.SwarmConnection, filters, labels []string
 		return errors.New("Unable to read any secrets from the source cluster")
 	}
 
-	util.Info("\nCreating secrets in target cluster\n\n")
-	failedToCreate := make(map[string]error)
-	for _, secret := range secretsToCopy {
-		//Create the secret in the target cluster
-		res, err := destClient.SecretCreate(context.Background(), secret)
-		if err != nil {
-			failedToCreate[secret.Name] = err
-			continue
-		}
-		util.Info("Created secret [%s] with ID [%s]\n", secret.Name, res.ID)
-	}
+	failedToCreate := createSecrets(destClient, secretsToCopy)
 
 	if len(failedToCreate) != 0 {
 		util.Warn("Unable to create the following secrets in the target cluster")

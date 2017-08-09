@@ -27,23 +27,27 @@ func Warn(format string, args ...interface{}) {
 
 func NewDockerClient(host, certPath string) (*client.Client, error) {
 
-	options := tlsconfig.Options{
-		CAFile:             filepath.Join(certPath, "ca.pem"),
-		CertFile:           filepath.Join(certPath, "cert.pem"),
-		KeyFile:            filepath.Join(certPath, "key.pem"),
-		InsecureSkipVerify: true,
-	}
+	httpClient := &http.Client{}
 
-	tlsc, err := tlsconfig.Client(options)
+	if len(certPath) != 0 {
+		options := tlsconfig.Options{
+			CAFile:             filepath.Join(certPath, "ca.pem"),
+			CertFile:           filepath.Join(certPath, "cert.pem"),
+			KeyFile:            filepath.Join(certPath, "key.pem"),
+			InsecureSkipVerify: false,
+		}
 
-	if err != nil {
-		return nil, err
-	}
+		tlsc, err := tlsconfig.Client(options)
 
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsc,
-		},
+		if err != nil {
+			return nil, err
+		}
+
+		httpClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: tlsc,
+			},
+		}
 	}
 
 	return client.NewClient(host, DOCKER_API_VERSION, httpClient, nil)

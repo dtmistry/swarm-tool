@@ -23,29 +23,23 @@ import (
 )
 
 var (
-	src, srcCertPath, dest, destCertPath string
-	filters, labels                      = []string{}, []string{}
+	src, srcCertPath, dest, destCertPath, prefix string
+	filters, labels                              = []string{}, []string{}
 )
 
 // copySecretsCmd represents the secretsMigrate command
 var copySecretsCmd = &cobra.Command{
 	Use:   "copy-secrets",
-	Short: "Copy secrets from one Swarm cluster to other",
+	Short: "Copy secrets between Swarm clusters",
 	Long: `Copy secrets from one Swarm cluster to other. 
 	For security reasons, this command will only work with a TLS enabled daemon`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(src) == 0 {
 			return errors.New("source is required")
-		} else if len(srcCertPath) == 0 {
-			return errors.New("source-cert-path is required")
 		} else if len(dest) == 0 {
 			return errors.New("destination is required")
-		} else if len(destCertPath) == 0 {
-			return errors.New("destination-cert-path is required")
 		}
 		//TODO add regex check for host
-		//TODO add file check for cert dirs
-		//TODO provide secret list filter options
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,7 +51,7 @@ var copySecretsCmd = &cobra.Command{
 			Host:     dest,
 			CertPath: destCertPath,
 		}
-		err := action.CopySecrets(source, dest, filters, labels, "copy")
+		err := action.CopySecrets(source, dest, filters, labels, prefix)
 		if err != nil {
 			return err
 		}
@@ -76,8 +70,7 @@ func init() {
 	copySecretsCmd.Flags().StringVarP(&destCertPath, "destination-cert-path", "", "", "Destination Docker TLS cert path")
 	copySecretsCmd.Flags().StringArrayVarP(&filters, "filter", "", nil, "Filters used to copy secrets from source cluster")
 	copySecretsCmd.Flags().StringArrayVarP(&labels, "label", "", nil, "Labels added to secret in the target cluster ")
+	copySecretsCmd.Flags().StringVarP(&prefix, "prefix", "p", "", "Prefix to be added while creating secrets in the target cluster")
 	copySecretsCmd.MarkFlagRequired("source")
 	copySecretsCmd.MarkFlagRequired("destination")
-	copySecretsCmd.MarkFlagRequired("source-cert-path")
-	copySecretsCmd.MarkFlagRequired("destination-cert-path")
 }
