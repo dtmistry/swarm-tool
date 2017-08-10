@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/dtmistry/swarm-tool/types"
 	"github.com/dtmistry/swarm-tool/util"
+	"github.com/imdario/mergo"
 	"github.com/pkg/errors"
 )
 
@@ -41,7 +42,10 @@ func readSecrets(client *client.Client, secrets []swarm.Secret, prefix string, c
 		} else {
 			newSecret.Name = prefix + secret.Spec.Name
 		}
-		newSecret.Labels = createArgs
+		err = mergo.Merge(&newSecret.Labels, createArgs)
+		if err != nil {
+			failedToRead[secret.Spec.Name] = err
+		}
 		secretsToCopy = append(secretsToCopy, newSecret)
 	}
 	return secretsToCopy, failedToRead
