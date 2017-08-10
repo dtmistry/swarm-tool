@@ -2,7 +2,7 @@ sudo: required
 services:
   - docker
 script:
-  - docker run --rm $PWD:/usr/src/app -w /usr/src/app -v go:/go golang:1.8 bash -c "go get -d -v -t && CGO_ENABLED=0 GOOS=linux go build -v -o swarm-tool"
+  - docker run --rm -v $PWD:/usr/src/app -w /usr/src/app -v go:/go golang:1.8 bash -c "go get -d -v -t && CGO_ENABLED=0 GOOS=linux go build -v -o swarm-tool"
 branches:
   only:
     - master
