@@ -1,3 +1,5 @@
+//TODO may be write a struct for swarm commands
+//TODO break down code in separate files
 package action
 
 import (
@@ -6,46 +8,14 @@ import (
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
-	swarm "github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 	"github.com/dtmistry/swarm-tool/types"
 	"github.com/dtmistry/swarm-tool/util"
 	"github.com/pkg/errors"
 )
 
-func GetMap(flags []string) (map[string]string, error) {
-	args := make(map[string]string)
-	if len(flags) == 0 {
-		return args, nil
-	}
-	for i := range flags {
-		if !strings.Contains(flags[i], "=") {
-			return args, errors.New("bad format of labels (expected name=value)")
-		} else {
-			parts := strings.SplitN(flags[i], "=", 2)
-			name := strings.ToLower(strings.TrimSpace(parts[0]))
-			value := strings.TrimSpace(parts[1])
-			args[name] = value
-		}
-	}
-	return args, nil
-}
-
-func GetArgs(flags []string) (filters.Args, error) {
-	var (
-		args = filters.NewArgs()
-		err  error
-	)
-	for i := range flags {
-		args, err = filters.ParseFlag(flags[i], args)
-		if err != nil {
-			return args, err
-		}
-	}
-	return args, nil
-}
-
-func readSecrets(client *client.Client, secrets []swarm.Secret, prefix string, createArgs map[string]string) ([]swarm.SecretSpec, map[string]error) {
+func readSecrets(client *client.Client, secrets []swarm.Secret, prefix string, createArgs map[string]string, args filters.Args, restore bool) ([]swarm.SecretSpec, map[string]error) {
 	var secretsToCopy []swarm.SecretSpec
 	failedToRead := make(map[string]error)
 
@@ -63,10 +33,13 @@ func readSecrets(client *client.Client, secrets []swarm.Secret, prefix string, c
 			Data:        data,
 			Annotations: secret.Spec.Annotations,
 		}
-		if len(prefix) == 0 {
+		if restore {
+			strip := args.Get("name")[0]
+			newSecret.Name = strings.TrimLeft(secret.Spec.Name, strip)
+		} else if len(prefix) == 0 {
 			newSecret.Name = secret.Spec.Name
 		} else {
-			newSecret.Name = prefix + "_" + secret.Spec.Name
+			newSecret.Name = prefix + secret.Spec.Name
 		}
 		newSecret.Labels = createArgs
 		secretsToCopy = append(secretsToCopy, newSecret)
@@ -90,7 +63,7 @@ func createSecrets(client *client.Client, secretsToCopy []swarm.SecretSpec) map[
 }
 
 //TODO break the huge method
-func CopySecrets(source, target *types.SwarmConnection, filters, labels []string, prefix string) error {
+func CopySecrets(source, target *types.SwarmConnection, filters, labels []string, prefix string, restore bool) error {
 	util.Info("\nCopying secrets from [%s] to [%s]\n\n", source.Host, target.Host)
 
 	//Create and check source docker client
@@ -103,7 +76,7 @@ func CopySecrets(source, target *types.SwarmConnection, filters, labels []string
 		return errors.Wrap(err, "Unable to connect to source docker host")
 	}
 
-	//Create and check tager docker client
+	//Create and check target docker client
 	destClient, err := util.NewDockerClient(target.Host, target.CertPath)
 	if err != nil {
 		return errors.Wrap(err, "Unable to create a client for destination docker host")
@@ -113,12 +86,12 @@ func CopySecrets(source, target *types.SwarmConnection, filters, labels []string
 		return errors.Wrap(err, "Unable to connect to target docker host")
 	}
 
-	filterArgs, err := GetArgs(filters)
+	filterArgs, err := util.GetArgs(filters)
 	if err != nil {
 		return errors.Wrap(err, "Unable to parse filter labels")
 	}
 
-	createArgs, err := GetMap(labels)
+	createArgs, err := util.GetMap(labels)
 	if err != nil {
 		return errors.Wrap(err, "Unable to parse labels")
 	}
@@ -133,8 +106,7 @@ func CopySecrets(source, target *types.SwarmConnection, filters, labels []string
 	if err != nil {
 		return errors.Wrap(err, "Unable to read secrets from source cluster")
 	}
-
-	secretsToCopy, failedToRead := readSecrets(srcClient, secrets, prefix, createArgs)
+	secretsToCopy, failedToRead := readSecrets(srcClient, secrets, prefix, createArgs, filterArgs, restore)
 	//Check if there were errors while reading the secrets
 	if len(failedToRead) != 0 {
 		util.Warn("Unable to inspect the following secrets from the source cluster")

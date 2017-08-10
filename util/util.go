@@ -1,17 +1,30 @@
+//TODO use logger
 package util
 
 import (
-	"net/http"
-	"path/filepath"
+	"errors"
+	"strings"
 
-	"github.com/docker/docker/client"
-	"github.com/docker/go-connections/tlsconfig"
 	"github.com/fatih/color"
 )
 
-const (
-	DOCKER_API_VERSION = "1.30"
-)
+func GetMap(flags []string) (map[string]string, error) {
+	args := make(map[string]string)
+	if len(flags) == 0 {
+		return args, nil
+	}
+	for i := range flags {
+		if !strings.Contains(flags[i], "=") {
+			return args, errors.New("bad format of labels (expected name=value)")
+		} else {
+			parts := strings.SplitN(flags[i], "=", 2)
+			name := strings.ToLower(strings.TrimSpace(parts[0]))
+			value := strings.TrimSpace(parts[1])
+			args[name] = value
+		}
+	}
+	return args, nil
+}
 
 func Err(format string, args ...interface{}) {
 	color.Red(format, args...)
@@ -23,32 +36,4 @@ func Info(format string, args ...interface{}) {
 
 func Warn(format string, args ...interface{}) {
 	color.Yellow(format, args...)
-}
-
-func NewDockerClient(host, certPath string) (*client.Client, error) {
-
-	httpClient := &http.Client{}
-
-	if len(certPath) != 0 {
-		options := tlsconfig.Options{
-			CAFile:             filepath.Join(certPath, "ca.pem"),
-			CertFile:           filepath.Join(certPath, "cert.pem"),
-			KeyFile:            filepath.Join(certPath, "key.pem"),
-			InsecureSkipVerify: false,
-		}
-
-		tlsc, err := tlsconfig.Client(options)
-
-		if err != nil {
-			return nil, err
-		}
-
-		httpClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: tlsc,
-			},
-		}
-	}
-
-	return client.NewClient(host, DOCKER_API_VERSION, httpClient, nil)
 }
