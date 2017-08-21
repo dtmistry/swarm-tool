@@ -14,7 +14,9 @@
 
 package main
 
-import "github.com/dtmistry/swarm-tool/cmd"
+import (
+	"github.com/dtmistry/swarm-tool/cmd"
+)
 
 func main() {
 	cmd.Execute()
