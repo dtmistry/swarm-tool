@@ -1,8 +1,8 @@
-//TODO use logger
-package util
+package cmd
 
 import (
 	"errors"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -24,6 +24,13 @@ func GetMap(flags []string) (map[string]string, error) {
 		}
 	}
 	return args, nil
+}
+
+func PathExists(path string) bool {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return false
+	}
+	return true
 }
 
 func Err(format string, args ...interface{}) {

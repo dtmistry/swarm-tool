@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dtmistry/swarm-tool/util"
-
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -39,7 +37,7 @@ var RootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		util.Err("error : %s", err)
+		Err("error : %s", err)
 		os.Exit(1)
 	}
 }
