@@ -13,7 +13,7 @@ const (
 	DEFAULT_PREFIX = "temp"
 )
 
-func getSecretName(name, prefix string) string {
+func GetSecretName(name, prefix string) string {
 	var buf bytes.Buffer
 	if len(prefix) == 0 {
 		buf.WriteString(DEFAULT_PREFIX)
@@ -56,7 +56,7 @@ func RotateSecret(secretName, secretFile, prefix string) error {
 		}).Warn("Secret is not attached to any services")
 	}
 	if updateServices {
-		tempSecretName := getSecretName(secretName, prefix)
+		tempSecretName := GetSecretName(secretName, prefix)
 		tempId, err := c.CreateSecret(tempSecretName, secretFile, nil)
 		if err != nil {
 			return err

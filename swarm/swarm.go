@@ -12,10 +12,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Defines a connection to a Docker swarm cluster
 type SwarmConnection struct {
 	client *client.Client
 }
 
+// Creates a new SwarmConnection by initializing the docker api client from enviornment defaults
 func NewSwarmConnection() (*SwarmConnection, error) {
 	cli, err := client.NewEnvClient()
 	if err != nil {
@@ -67,6 +69,7 @@ func (c *SwarmConnection) FindSecret(secretName string) (swarm.Secret, error) {
 	return secrets[0], err
 }
 
+// Updates a secret by removing it and creating it again with the file provided
 func (c *SwarmConnection) UpdateSecret(ID, name, file string) (string, error) {
 	err := c.RemoveSecret(ID)
 	if err != nil {
@@ -108,6 +111,7 @@ func (c *SwarmConnection) CreateSecret(secretName, secretFile string, labels map
 	return resp.ID, nil
 }
 
+// Updates a service
 func (c *SwarmConnection) UpdateService(ID string, spec swarm.ServiceSpec, version swarm.Version) (types.ServiceUpdateResponse, error) {
 	return c.client.ServiceUpdate(context.Background(), ID, version, spec, types.ServiceUpdateOptions{})
 }
