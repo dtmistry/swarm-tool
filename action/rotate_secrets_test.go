@@ -7,23 +7,23 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type RotateSecretsTestSuite struct {
+type RotateSecretsSuite struct {
 	suite.Suite
 }
 
-func TestRotateSecretsTestSuite(t *testing.T) {
-	s := new(RotateSecretsTestSuite)
+func TestRotateSecretsSuite(t *testing.T) {
+	s := new(RotateSecretsSuite)
 	suite.Run(t, s)
 }
 
-func (s *RotateSecretsTestSuite) TestGetSecretNameDefault() {
+func (s *RotateSecretsSuite) TestGetSecretNameDefault() {
 	//Default Case
 	name := GetSecretName("test", "")
 	assert.False(s.T(), len(name) == 0)
 	assert.Equal(s.T(), "temp_test", name)
 }
 
-func (s *RotateSecretsTestSuite) TestGetSecretName() {
+func (s *RotateSecretsSuite) TestGetSecretName() {
 	name := GetSecretName("test", "prefix")
 	assert.False(s.T(), len(name) == 0)
 	assert.Equal(s.T(), "prefix_test", name)

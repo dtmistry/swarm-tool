@@ -3,6 +3,6 @@
 
 A collection of admin tasks for a [Docker Swarm](https://docs.docker.com/engine/swarm/) cluster
 
-### copy-secrets
+### rotate-secrets
 
-copy secrets between swarm cluster
+Updates an existing docker swarm secret
