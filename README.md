@@ -6,3 +6,6 @@ A collection of admin tasks for a [Docker Swarm](https://docs.docker.com/engine/
 ### rotate-secrets
 
 Updates an existing docker swarm secret
+
+*Usage*
+
