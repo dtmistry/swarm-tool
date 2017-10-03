@@ -1,9 +1,24 @@
 sudo: required
 services:
-  - docker
+- docker
 script:
-  - docker run --rm -v $PWD:/usr/src/app -w /usr/src/app -v go:/go golang:1.8 bash -c "go get -d -v -t && CGO_ENABLED=0 GOOS=linux go build -v -o swarm-tool"
+- docker run --rm -v $PWD:/usr/src/app -w /usr/src/app -v go:/go golang:1.8 bash -c
+  "go get -d -v -t && CGO_ENABLED=0 GOOS=linux go build -v -o swarm-tool"
+- docker run --rm -v $PWD:/usr/src/app -w /usr/src/app -v go:/go golang:1.8 bash -c
+  'go get github.com/mitchellh/gox && CGO_ENABLED=0 gox -os="darwin linux windows"
+  -arch="amd64" -output="swarm-tool.." -verbose ./...'
 branches:
   only:
-    - master
-
+  - master
+deploy:
+  skip_cleanup: true
+  provider: releases
+  api_key:
+    secure: iBw1hQc/L2QnWgQyFnnNxc+qHg5afBXAYfnMbNw9YdsOfmJvjp/Y09ZvrBemNDcDrSxRz7hi6z3g0ytEkBovqnTw2zl95qMTWAHcOwCPTSS6mPa0/NI2wurYTtPxaw4aSC6vlQf5N1PcQKoMc6xGUa9HcFcG3tNDYYdwiTRbJI7FMGSaG//59szD8IMXow/YNKb8Cbh5e39xT6CCiJu39M2hOJ2WI633PVOVy5MaZrGNP1Da45PPtsJiV2yhW6pkORA6UEEASjaZSTVXCaWz3iy8JqycLST6EHgAYKXk+7quEb0a9p7AM3bBUYq+iDanmItlqKdvjqeh3om+FbMNv98023ouHiVO9hHK2pSTcMHgbANrShl7gMg6cGF/0uJ30EB+/vHE8mYtbBlLqSqVRxpve+CRWACskNmp697gxwhHk0Tk57RtmWy3WY72C5aKTDtw+viSdxRz0cgoa+nuWmg5HhAyNlS4PkgSPRPlta4uI1WWQ5ysGnZ0Jg699jEderd2b+C2Ep/nE00xYZJTKI9ojTac7dbI6YMbKehREWDfPl3l9lA43vzDat7CLlVQInzd65HhN3G8+DVmM89NYaSAcCtAv/kyYGOMj4A+QOKk7Ui35b8TIdEK2+8RiAn4vqWDtmqliCWFV2O54MsqW+YeAN0k6V6hwoKD7ke46J4=
+  file:
+  - swarm-tool.linux.amd64
+  - swarm-tool.windows.amd64.exe
+  - swarm-tool.darwin.amd64
+  on:
+    repo: dtmistry/swarm-tool
+    tags: true
