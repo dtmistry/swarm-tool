@@ -6,7 +6,7 @@ script:
   "go get -d -v -t && CGO_ENABLED=0 GOOS=linux go build -v -o swarm-tool"
 - docker run --rm -v $PWD:/usr/src/app -w /usr/src/app -v go:/go golang:1.8 bash -c
   'go get github.com/mitchellh/gox github.com/inconshreveable/mousetrap && CGO_ENABLED=0 gox -os="darwin linux windows"
-  -arch="amd64" -output="swarm-tool.." -verbose ./...'
+  -arch="amd64" -output="swarm-tool.{{.OS}}.{{.Arch}}" -verbose ./...'
 branches:
   only:
   - master
