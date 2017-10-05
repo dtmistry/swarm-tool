@@ -2,7 +2,6 @@ package swarm
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 
 	"github.com/docker/docker/api/types"
@@ -10,6 +9,7 @@ import (
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 // Defines a connection to a Docker swarm cluster
@@ -64,7 +64,11 @@ func (c *SwarmConnection) FindSecret(secretName string) (swarm.Secret, error) {
 		return secret, nil
 	}
 	if len(secrets) > 1 && err == nil {
-		return secret, fmt.Errorf("Multiple secrets found for name: %s", secretName)
+		for _, s := range secrets {
+			if s.Spec.Name == secretName {
+				return s, nil
+			}
+		}
 	}
 	return secrets[0], err
 }
@@ -109,6 +113,37 @@ func (c *SwarmConnection) CreateSecret(secretName, secretFile string, labels map
 		return "", errors.Wrap(err, "Error creating secret")
 	}
 	return resp.ID, nil
+}
+
+//TODO Aggregate errors
+//Updates the supplied []swarm.Service with the new secret reference
+func (c *SwarmConnection) UpdateServicesWithSecret(services []swarm.Service, newSecretRef *swarm.SecretReference, secretIdToReplace string) error {
+	for _, service := range services {
+		existingSpec := service.Spec
+		log.WithFields(log.Fields{
+			"service": existingSpec.Name,
+		}).Info("Updating service...")
+		currentSecrets := existingSpec.TaskTemplate.ContainerSpec.Secrets
+		i := 0
+		for ; i < len(currentSecrets); i++ {
+			if currentSecrets[i].SecretID == secretIdToReplace {
+				//Remove this secret
+				newSecretRef.File = currentSecrets[i].File
+				break
+			}
+		}
+		currentSecrets = append(currentSecrets[:i], currentSecrets[i+1:]...)
+		currentSecrets = append(currentSecrets, newSecretRef)
+		resp, err := c.UpdateService(service.ID, existingSpec, service.Version)
+		if err != nil {
+			return errors.Wrapf(err, "Unable to update service %s", existingSpec.Name)
+		}
+		log.WithFields(log.Fields{
+			"service":  existingSpec.Name,
+			"warnings": resp.Warnings,
+		}).Info("Service updated")
+	}
+	return nil
 }
 
 // Updates a service

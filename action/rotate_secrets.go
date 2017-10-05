@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/dtmistry/swarm-tool/swarm"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,10 +25,12 @@ func GetSecretName(name, prefix string) string {
 }
 
 func RotateSecret(secretName, secretFile, prefix string) error {
+	//Get a connection to swarm
 	c, err := swarm.NewSwarmConnection()
 	if err != nil {
 		return err
 	}
+	//Check if the secret exists
 	existingSecret, err := c.FindSecret(secretName)
 	if err != nil {
 		return err
@@ -37,70 +38,81 @@ func RotateSecret(secretName, secretFile, prefix string) error {
 	if len(existingSecret.ID) == 0 {
 		return fmt.Errorf("Secret %s does not exist in this swarm", secretName)
 	}
-
 	//Find services with secret
 	services, err := c.FindServices(secretName)
 	if err != nil {
 		return err
 	}
-	var updateServices bool = false
+	//Update services
 	if len(services) != 0 {
-		updateServices = true
-		log.Info("The following services will be updated")
-		for _, service := range services {
-			log.Info(service.Spec.Name)
+		log.WithFields(log.Fields{
+			"secret": secretName,
+		}).Info("Services attached to this secret will be updated")
+
+		tempSecretName := GetSecretName(secretName, prefix)
+		log.WithFields(log.Fields{
+			"temp-secret": tempSecretName,
+		}).Info("Creating temp secret")
+		tempId, err := c.CreateSecret(tempSecretName, secretFile, nil)
+		if err != nil {
+			return err
+		}
+		//Create a temp secret reference with the original target
+		tempSecretRef := c.SecretReference(tempSecretName, tempId, secretName)
+		//Update the services with temp reference and removing the original secret
+		log.WithFields(log.Fields{
+			"add-secret":    tempSecretName,
+			"remove-secret": secretName,
+		}).Info("Updating services with temp secret")
+		err = c.UpdateServicesWithSecret(services, tempSecretRef, existingSecret.ID)
+		if err != nil {
+			return err
+		}
+		//Update the original secret with new file
+		log.WithFields(log.Fields{
+			"secret": secretName,
+			"file":   secretFile,
+		}).Info("Updating original secret with new file")
+		updatedSecretId, err := c.UpdateSecret(existingSecret.ID, secretName, secretFile)
+		if err != nil {
+			return err
+		}
+		//Create an updated reference
+		updatedSecretRef := c.SecretReference(secretName, updatedSecretId, secretName)
+		//Find the services again with tempSecretName. Need to do this to get the correct spec.Version object
+		updatedServices, err := c.FindServices(tempSecretName)
+		if err != nil {
+			return err
+		}
+		log.WithFields(log.Fields{
+			"add-secret":    secretName,
+			"remove-secret": tempSecretName,
+		}).Info("Updating services with secret")
+		//Update the services with new reference and removing the temp secret
+		err = c.UpdateServicesWithSecret(updatedServices, updatedSecretRef, tempId)
+		if err != nil {
+			return err
+		}
+		//Delete the temp secret
+		log.WithFields(log.Fields{
+			"secret": tempSecretName,
+		}).Info("Removing temp secret")
+		err = c.RemoveSecret(tempId)
+		if err != nil {
+			return err
 		}
 	} else {
 		log.WithFields(log.Fields{
 			"secret": secretName,
 		}).Warn("Secret is not attached to any services")
-	}
-	if updateServices {
-		tempSecretName := GetSecretName(secretName, prefix)
-		tempId, err := c.CreateSecret(tempSecretName, secretFile, nil)
+		id, err := c.UpdateSecret(existingSecret.ID, secretName, secretFile)
 		if err != nil {
 			return err
 		}
 		log.WithFields(log.Fields{
-			"secret": tempSecretName,
-			"ID":     tempId,
-		}).Info("Created temp secret")
-
-		tempSecretRef := c.SecretReference(tempSecretName, tempId, secretName)
-
-		for _, service := range services {
-			existingSpec := service.Spec
-			log.WithFields(log.Fields{
-				"service": existingSpec.Name,
-			}).Info("Updating service...")
-			currentSecrets := existingSpec.TaskTemplate.ContainerSpec.Secrets
-			i := 0
-			for ; i < len(currentSecrets); i++ {
-				if currentSecrets[i].SecretID == existingSecret.ID {
-					//Remove this secret
-					tempSecretRef.File = currentSecrets[i].File
-					break
-				}
-			}
-			currentSecrets = append(currentSecrets[:i], currentSecrets[i+1:]...)
-			currentSecrets = append(currentSecrets, tempSecretRef)
-			resp, err := c.UpdateService(service.ID, existingSpec, service.Version)
-			if err != nil {
-				return errors.Wrapf(err, "Unable to update service %s", existingSpec.Name)
-			}
-			log.WithFields(log.Fields{
-				"service":  existingSpec.Name,
-				"warnings": resp.Warnings,
-			}).Info("Service updated")
-		}
+			"secret": secretName,
+			"ID":     id,
+		}).Info("Secret Updated")
 	}
-	id, err := c.UpdateSecret(existingSecret.ID, secretName, secretFile)
-	if err != nil {
-		return err
-	}
-	log.WithFields(log.Fields{
-		"secret": secretName,
-		"ID":     id,
-	}).Info("Secret Updated")
 	return nil
 }
