@@ -2,6 +2,7 @@ package swarm
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
 
 	"github.com/docker/docker/api/types"
@@ -115,6 +116,44 @@ func (c *SwarmConnection) CreateSecret(secretName, secretFile string, labels map
 	return resp.ID, nil
 }
 
+//Waits for the service to converge
+func (c *SwarmConnection) WaitForService(service string) error {
+	log.WithFields(log.Fields{
+		"service": service,
+	}).Info("Waiting for service to converge")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//Only listen to service events
+	args := filters.NewArgs()
+	args.Add("type", "service")
+	options := types.EventsOptions{
+		Filters: args,
+	}
+	messages, errs := c.client.Events(ctx, options)
+loop:
+	for {
+		select {
+		case err := <-errs:
+			if err != nil && err != io.EOF {
+				return err
+			}
+		case event := <-messages:
+			//If the event is an update, and the updatestate.new == completed, service is updated successfully
+			if event.Action == "update" {
+				attrs := event.Actor.Attributes
+				name := attrs["name"]
+				if name == service {
+					updateState := attrs["updatestate.new"]
+					if updateState == "completed" {
+						break loop
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 //TODO Aggregate errors
 //Updates the supplied []swarm.Service with the new secret reference
 func (c *SwarmConnection) UpdateServicesWithSecret(services []swarm.Service, newSecretRef *swarm.SecretReference, secretIdToReplace string) error {
@@ -137,6 +176,11 @@ func (c *SwarmConnection) UpdateServicesWithSecret(services []swarm.Service, new
 		resp, err := c.UpdateService(service.ID, existingSpec, service.Version)
 		if err != nil {
 			return errors.Wrapf(err, "Unable to update service %s", existingSpec.Name)
+		}
+		//Wait for service update to converge
+		err = c.WaitForService(existingSpec.Name)
+		if err != nil {
+			return err
 		}
 		log.WithFields(log.Fields{
 			"service":  existingSpec.Name,
