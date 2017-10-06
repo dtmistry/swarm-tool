@@ -27,7 +27,6 @@ func GetSecretName(name, prefix string) string {
 //TODO Handled roll-back if
 //		 1) If service update with temp secret fails
 //     2) If service update with updated original secret fails
-//TODO Remove temp secret as a part of a defer func
 func RotateSecret(secretName, secretFile, prefix string) error {
 	//Get a connection to swarm
 	c, err := swarm.NewSwarmConnection()
@@ -62,6 +61,17 @@ func RotateSecret(secretName, secretFile, prefix string) error {
 			"temp-secret": tempSecretName,
 		}).Info("Creating temp secret")
 		tempId, err := c.CreateSecret(tempSecretName, secretFile, nil)
+		defer func() error {
+			//Delete the temp secret
+			log.WithFields(log.Fields{
+				"secret": tempSecretName,
+			}).Info("Removing temp secret")
+			err = c.RemoveSecret(tempId)
+			if err != nil {
+				return err
+			}
+			return nil
+		}()
 		if err != nil {
 			return err
 		}
@@ -98,14 +108,6 @@ func RotateSecret(secretName, secretFile, prefix string) error {
 		}).Info("Updating services with updated secret")
 		//Update the services with new reference and removing the temp secret
 		err = c.UpdateServicesWithSecret(updatedServices, updatedSecretRef, tempId)
-		if err != nil {
-			return err
-		}
-		//Delete the temp secret
-		log.WithFields(log.Fields{
-			"secret": tempSecretName,
-		}).Info("Removing temp secret")
-		err = c.RemoveSecret(tempId)
 		if err != nil {
 			return err
 		}
