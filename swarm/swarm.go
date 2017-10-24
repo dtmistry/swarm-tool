@@ -2,7 +2,7 @@ package swarm
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"io/ioutil"
 
 	"github.com/docker/docker/api/types"
@@ -117,51 +117,36 @@ func (c *SwarmConnection) CreateSecret(secretName, secretFile string, labels map
 }
 
 //Waits for the service to converge
-func (c *SwarmConnection) WaitForService(service string) error {
-	log.WithFields(log.Fields{
-		"service": service,
-	}).Info("Waiting for service to converge")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	//Only listen to service events
-	args := filters.NewArgs()
-	args.Add("type", "service")
-	options := types.EventsOptions{
-		Filters: args,
-	}
-	messages, errs := c.client.Events(ctx, options)
-loop:
+func (c *SwarmConnection) waitForServiceUpdate(ctx context.Context, serviceID string) error {
 	for {
-		select {
-		case err := <-errs:
-			if err != nil && err != io.EOF {
-				return err
-			}
-		case event := <-messages:
-			//If the event is an update, and the updatestate.new == completed, service is updated successfully
-			if event.Action == "update" {
-				attrs := event.Actor.Attributes
-				name := attrs["name"]
-				if name == service {
-					updateState := attrs["updatestate.new"]
-					if updateState == "completed" {
-						break loop
-					}
-				}
+		service, _, err := c.client.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
+		if err != nil {
+			return err
+		}
+		if service.UpdateStatus != nil {
+			switch service.UpdateStatus.State {
+			case swarm.UpdateStateCompleted:
+				return nil
+			case swarm.UpdateStatePaused:
+				return fmt.Errorf("service update paused: %s", service.UpdateStatus.Message)
+			case swarm.UpdateStateRollbackCompleted:
+				return fmt.Errorf("service rolled back: %s", service.UpdateStatus.Message)
+			case swarm.UpdateStateRollbackPaused:
+				return fmt.Errorf("service rollback paused: %s", service.UpdateStatus.Message)
 			}
 		}
 	}
-	return nil
 }
 
 //TODO Aggregate errors
 //Updates the supplied []swarm.Service with the new secret reference
 func (c *SwarmConnection) UpdateServicesWithSecret(services []swarm.Service, newSecretRef *swarm.SecretReference, secretIdToReplace string) error {
 	for _, service := range services {
+		ctx := context.Background()
 		existingSpec := service.Spec
 		log.WithFields(log.Fields{
 			"service": existingSpec.Name,
-		}).Info("Updating service...")
+		}).Info("Updating service")
 		currentSecrets := existingSpec.TaskTemplate.ContainerSpec.Secrets
 		i := 0
 		for ; i < len(currentSecrets); i++ {
@@ -173,12 +158,12 @@ func (c *SwarmConnection) UpdateServicesWithSecret(services []swarm.Service, new
 		}
 		currentSecrets = append(currentSecrets[:i], currentSecrets[i+1:]...)
 		currentSecrets = append(currentSecrets, newSecretRef)
-		resp, err := c.UpdateService(service.ID, existingSpec, service.Version)
+		resp, err := c.UpdateService(ctx, service.ID, existingSpec, service.Version)
 		if err != nil {
 			return errors.Wrapf(err, "Unable to update service %s", existingSpec.Name)
 		}
 		//Wait for service update to converge
-		err = c.WaitForService(existingSpec.Name)
+		err = c.waitForServiceUpdate(ctx, service.ID)
 		if err != nil {
 			return err
 		}
@@ -191,8 +176,8 @@ func (c *SwarmConnection) UpdateServicesWithSecret(services []swarm.Service, new
 }
 
 // Updates a service
-func (c *SwarmConnection) UpdateService(ID string, spec swarm.ServiceSpec, version swarm.Version) (types.ServiceUpdateResponse, error) {
-	return c.client.ServiceUpdate(context.Background(), ID, version, spec, types.ServiceUpdateOptions{})
+func (c *SwarmConnection) UpdateService(ctx context.Context, ID string, spec swarm.ServiceSpec, version swarm.Version) (types.ServiceUpdateResponse, error) {
+	return c.client.ServiceUpdate(ctx, ID, version, spec, types.ServiceUpdateOptions{})
 }
 
 // Returns a list of Swarm services filtered by the provided secret name

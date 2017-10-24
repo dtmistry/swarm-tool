@@ -70,6 +70,9 @@ func RotateSecret(secretName, secretFile, prefix string) error {
 			if err != nil {
 				return err
 			}
+			log.WithFields(log.Fields{
+				"secret": secretName,
+			}).Info("Finished rotating secret")
 			return nil
 		}()
 		if err != nil {
