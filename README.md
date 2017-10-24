@@ -3,6 +3,15 @@
 
 A collection of admin tasks for a [Docker Swarm](https://docs.docker.com/engine/swarm/) cluster
 
+## Commands
+
+By default the tool connects to the local daemon socket. [Environment variables](https://docs.docker.com/engine/reference/commandline/cli/#environment-variables) supported by docker cli can also be used.
+
+To connect to a secure remote daemon socket, use the below environment variables
+
+```bash
+$ export DOCKER_HOST=tcp://remote-host:remote-port DOCKER_TLS_VERIFY=1 DOCKER_CERT_PATH=/path/to/certs
+```
 ### rotate-secrets
 
 Updates an existing docker swarm secret
