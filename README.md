@@ -3,6 +3,14 @@
 
 A collection of admin tasks for a [Docker Swarm](https://docs.docker.com/engine/swarm/) cluster
 
+## Install
+
+[Download](https://github.com/dtmistry/swarm-tool/releases) the binary (optionally rename) and put it in your path. Execute `help` to verify installation
+
+```bash
+$ swarm-tool --help
+```
+
 ## Commands
 
 By default the tool connects to the local daemon socket. [Environment variables](https://docs.docker.com/engine/reference/commandline/cli/#environment-variables) supported by docker cli can also be used.
